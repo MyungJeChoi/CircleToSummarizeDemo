@@ -4,16 +4,18 @@ import android.content.Context
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+
+// import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+// import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import kotlinx.coroutines.tasks.await
 
 class MlKitOcrClient(
     private val context: Context
 ) {
 
-    // 기본 라틴 인식기 (한글+영문 혼합이면 MULTI 스펙 고려 가능)
     private val recognizer = TextRecognition.getClient(
-        TextRecognizerOptions.Builder().build()
+        KoreanTextRecognizerOptions.Builder().build()
     )
 
     suspend fun recognizeText(uri: Uri): String {

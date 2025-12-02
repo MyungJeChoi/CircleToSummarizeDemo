@@ -1,77 +1,116 @@
 package com.example.circletosummarize.llm
 
 import android.app.Application
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
+import android.util.Log
+import ai.onnxruntime.genai.Generator
+import ai.onnxruntime.genai.GeneratorParams
+import ai.onnxruntime.genai.Model
+import ai.onnxruntime.genai.Tokenizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class OnnxLlmClient(
     private val app: Application
 ) : LlmClient {
 
-    // ONNX Runtime 환경
-    private val env: OrtEnvironment by lazy {
-        OrtEnvironment.getEnvironment()
+    companion object {
+        private const val TAG = "OnnxLlmClient"
+        private const val MODEL_SUBDIR = "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4"
+        private const val MAX_LENGTH_TOKENS = 768.0
     }
 
-    // 실제 모델은 assets/ 에 넣고 이름 맞춰야 함.
-    // 예: app/src/main/assets/phi3-mini-4k-int4.onnx
-    private val session: OrtSession by lazy {
-        val modelBytes = app.assets.open("phi3-mini-4k-int4.onnx").readBytes()
-        env.createSession(modelBytes)
-    }
+    @Volatile
+    private var model: Model? = null
+
+    @Volatile
+    private var tokenizer: Tokenizer? = null
 
     override suspend fun summarize(text: String, lang: String): String =
         withContext(Dispatchers.Default) {
-            // 1) 프롬프트 구성
+            if (text.isBlank()) return@withContext ""
+
             val prompt = buildPrompt(text, lang)
 
-            // 2) TODO: 실제 토크나이저 + ONNX 호출
-            // 현재는 구조만 잡고, 임시로 앞부분 잘라서 "요약처럼" 보여줌.
-            // 나중에 phi3/llama/gemma의 tokenizer & session.run()을 여기에 구현.
+            try {
+                val (m, t) = getOrCreateModelAndTokenizer()
 
-            // ===== 임시 로직 (LLM 없이 동작 확인용) =====
-            promptToNaiveSummary(text)
+                val params = GeneratorParams(m)
+                params.setSearchOption("max_length", MAX_LENGTH_TOKENS)
+                params.setSearchOption("do_sample", false)
+                params.setSearchOption("top_p", 0.9)
+                params.setSearchOption("temperature", 0.3)
+
+                val generator = Generator(m, params)
+
+                val sequences = t.encode(prompt)
+                generator.appendTokenSequences(sequences)
+                while (!generator.isDone) {
+                    generator.generateNextToken()
+                }
+                val outputIds = generator.getSequence(0L)
+                val fullText = t.decode(outputIds)
+
+                postProcessSummary(prompt, fullText)
+            } catch (e: Exception) {
+                Log.e(TAG, "LLM summarize error: ${e.message}", e)
+                fallbackSummary(text)
+            }
         }
 
-    private fun buildPrompt(text: String, lang: String): String {
-        return if (lang == "korean") {
-            "다음 한국어 문서를 한 줄로 간단히 요약해줘.\n\n$text\n\n요약 (한 줄로):"
-        } else {
-            "Summarize the following text in one concise line.\n\n$text\n\nSummary (one line):"
+    private fun getOrCreateModelAndTokenizer(): Pair<Model, Tokenizer> {
+        val existingModel = model
+        val existingTokenizer = tokenizer
+        if (existingModel != null && existingTokenizer != null) {
+            return existingModel to existingTokenizer
+        }
+
+        synchronized(this) {
+            val againModel = model
+            val againTokenizer = tokenizer
+            if (againModel != null && againTokenizer != null) {
+                return againModel to againTokenizer
+            }
+
+            // assets → filesDir 복사
+            val modelRoot: File = ModelAssetManager.ensureModelOnDisk(app)
+            val modelDir = File(modelRoot, MODEL_SUBDIR)
+            if (!modelDir.exists()) {
+                throw IllegalStateException("Model directory not found: ${modelDir.absolutePath}")
+            }
+
+            val m = Model(modelDir.absolutePath)
+            val t = Tokenizer(m)
+
+            model = m
+            tokenizer = t
+            return m to t
         }
     }
 
-    /**
-     * LLM을 붙이기 전까지 쓸 naïve 요약:
-     * - 줄바꿈 제거 + 앞부분 N자만 자르기.
-     */
-    private fun promptToNaiveSummary(text: String, maxChars: Int = 150): String {
+    private fun buildPrompt(text: String, lang: String): String {
+        return if (lang.lowercase().startsWith("ko")) {
+            "다음 한국어 문서를 한 줄로 간단히 요약해줘.\n\n$text\n\n요약:"
+        } else {
+            "Summarize the following document into a single concise sentence.\n\n$text\n\nSummary:"
+        }
+    }
+
+    private fun postProcessSummary(prompt: String, fullOutput: String): String {
+        // 프롬프트까지 함께 생성되었을 가능성이 있으므로 제거
+        val cleaned = fullOutput.replace(prompt, "")
+        return cleaned
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .replace("\\s+".toRegex(), " ")
+            .trim()
+    }
+
+    private fun fallbackSummary(text: String, maxChars: Int = 150): String {
         val flat = text
             .replace("\n", " ")
             .replace("\\s+".toRegex(), " ")
             .trim()
         return if (flat.length <= maxChars) flat else flat.take(maxChars) + "…"
     }
-
-    // === 참고용 (나중에 구현시) ===
-    @Suppress("unused")
-    private suspend fun callOnnxModel(prompt: String): String =
-        withContext(Dispatchers.Default) {
-            // 예시 구조 (실제 구현시 교체)
-            val fakeIds = longArrayOf(1L, 2L, 3L)
-            val shape = longArrayOf(1L, fakeIds.size.toLong())
-
-            val inputTensor = OnnxTensor.createTensor(env, fakeIds, shape)
-
-            val outputs = session.run(
-                mapOf("input_ids" to inputTensor) // 실제 모델 I/O 이름에 맞춰야 함
-            )
-
-            // 출력 해석도 모델 구조에 맞게 구현 필요
-            // 여기서는 TODO
-            "TODO: ONNX LLM 호출 결과"
-        }
 }
