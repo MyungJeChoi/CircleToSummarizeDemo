@@ -8,7 +8,7 @@ class LangIdClient {
 
     private val identifier = LanguageIdentification.getClient(
         LanguageIdentificationOptions.Builder()
-            .setConfidenceThreshold(0.5f) // 0.0~1.0, 널널하게 두고 시작해도 됨
+            .setConfidenceThreshold(0.5f)
             .build()
     )
 
