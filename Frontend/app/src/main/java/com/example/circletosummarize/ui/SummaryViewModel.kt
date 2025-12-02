@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.circletosummarize.llm.LlmClient
 import com.example.circletosummarize.llm.OnnxLlmClient
 import com.example.circletosummarize.ocr.MlKitOcrClient
+import com.example.circletosummarize.ocr.LangIdClient
 import kotlinx.coroutines.launch
 
 data class SummaryUiState(
@@ -42,13 +43,16 @@ class SummaryViewModel(
         viewModelScope.launch {
             try {
                 val text = ocrClient.recognizeText(uri)
+                val client = LangIdClient()
+                val langCode = client.detectPrimaryLanguage(text)
+
                 uiState = uiState.copy(
                     ocrText = text,
                     statusMessage = "요약 중..."
                 )
 
                 val summary = if (text.isNotBlank()) {
-                    llmClient.summarize(text, lang = "korean")
+                    llmClient.summarize(text, lang = langCode)
                 } else {
                     "(OCR 결과 없음)"
                 }

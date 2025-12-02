@@ -63,7 +63,7 @@ def summarize(to_summarize, lang, tokenizer, model, device):
         pad_token_id=eos_id
     )
 
-    # 🔥 generated 토큰만 분리
+    # generated 토큰만 분리
     input_len = inputs["input_ids"].shape[1]
     generated_tokens = outputs[0][input_len:]     # prompt 제외
 

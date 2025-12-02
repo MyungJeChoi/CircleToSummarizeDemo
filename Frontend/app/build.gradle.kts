@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.circletosummarize"
-        minSdk = 26
+        minSdk = 27
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -66,14 +66,18 @@ dependencies {
 
     // coroutines
     implementation(libs.coroutines.android)
-    implementation(libs.coroutines.play.services)   // ← Task.await() 확장 함수 제공
+    implementation(libs.coroutines.play.services)
 
-    // Activity.viewModels() 쓰기 위한 KTX
+    // Activity.viewModels()
     implementation(libs.androidx.activity.ktx)
 
     // ML Kit on-device OCR
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.language.id)
+    implementation(libs.mlkit.text.recognition.chinese)
+    implementation(libs.mlkit.text.recognition.korean)
 
     // ONNX Runtime Android (phi3/llama/gemma on-device용)
     implementation(libs.onnxruntime.android)
+    implementation(files("libs/onnxruntime-genai-release.aar"))
 }

@@ -13,5 +13,8 @@ Frontend/captures
 Frontend/.externalNativeBuild
 Frontend/.cxx
 Frontend/local.properties
+Frontend/app/src/main/assets/*
 
 Backend/*.ipynb
+
+*.sh

@@ -40,10 +40,9 @@ import androidx.activity.viewModels
 
 class MainActivity : ComponentActivity() {
 
-    // AndroidX Activity KTX의 viewModels() (libs.androidx.activity.ktx)
     private val viewModel: SummaryViewModel by viewModels()
 
-    // 갤러리 이미지 선택 런처
+    // 갤러리 이미지 선택
     private val pickImageLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let { viewModel.onImageSelected(it) }
